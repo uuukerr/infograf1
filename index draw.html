@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Красивый конструктор инфографики</title>
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Основные библиотеки -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs/dist/pptxgen.bundle.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/topojson@3"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.6.1/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@d3fc/d3fc-cartogram/dist/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas/dist/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://www.draw.io/css/mxClient.css" />
+    <script src="https://www.draw.io/js/mxClient.js"></script>
+    <style>
+        /* Стили для всплывающих подсказок */
+        .tooltip {
+            position: absolute;
+            z-index: 10;
+            visibility: hidden;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+            padding: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <script>
+        // Объявляем функцию для экспорта презентации
+        // Объявляем функцию для экспорта презентации
+        async function exportPresentation() {
+            const pres = new PptxGenJS();
+            const slide = pres.addSlide(); // Новый чистый слайд
+
+            const element = document.querySelector("#visualization-output");
+            const canvas = await html2canvas(element, { allowTaint: true, useCORS: true }); // Используем параметры для поддержки прозрачных изображений
+            const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve));
+
+            const buffer = await pngBlob.arrayBuffer();
+            const base64Str = btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));
+            const imgSrc = `data:image/png;base64,${base64Str}`;
+
+            // Устанавливаем полное покрытие слайда изображением
+            slide.addImage({
+                data: imgSrc,
+                fit: true,   // Авто-подгон размера
+                x: 0, y: 0,
+                cx: 720, cy: 540 // Ширина и высота слайда в точках (для стандартного A4)
+            });
+
+            pres.writeFile({ filename: "Инфографика.pptx" });
+        }
+
+        function exportSvg() {
+            const svgElement = document.querySelector("#visualization-output svg");
+            const serializer = new XMLSerializer();
+            const svgXml = serializer.serializeToString(svgElement);
+            const blob = new Blob([svgXml], { type: "image/svg+xml" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "my-svg.svg";
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function exportImage() {
+            const element = document.querySelector("#visualization-output");
+            const canvas = await html2canvas(element);
+            const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve));
+
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(pngBlob);
+            link.download = "test-image.png";
+            link.click();
+        }
+
+    </script>
+    <header class="header">
+        <h1>Конструктор инфографики</h1>
+    </header>
+    <nav class="mode-navigation">
+        <button id="automatic-mode-btn">Автоматическая инфографика</button>
+        <button id="free-design-btn">Свободное построение</button>
+    </nav>
+    <main class="main">
+        <section class="constructor-section">
+            <div class="constructor-title">
+                <h2>Ввод данных и настройка</h2>
+            </div>
+            <form id="upload-form">
+                <textarea rows="5" cols="50" id="data-textarea" placeholder="Ваши данные в формате CSV 
+year,gdp,population
+1990,10805,147200000
+1995,8818,148500000
+2000,10511,146800000
+2005,16221,143400000
+2010,21271,142800000
+2015,24062,146200000
+2020,28181,146700000"></textarea>
+                <input type="file" accept=".csv,.xls,.json" id="file-upload" />
+                <button type="button" id="generate-button">Создать инфографику</button>
+            </form>
+        </section>
+        <div style="display: flex; justify-content: center; margin-top: 20px;">
+            <button onclick="exportImage()">Сохранить график в JPG</button>
+            <button onclick="exportExcel()">Сохранить данные в Excel</button>
+            <button onclick="exportPresentation()">Скачать презентацию (.pptx)</button>
+            <button onclick="exportSvg()">Экспорт SVG</button>
+        </div>
+        <section class="settings-section">
+            <div class="settings-title">
+                <h2>Настройки визуализации</h2>
+            </div>
+            <div class="settings-wrapper">
+                <label for="chart-type">Тип графика:</label>
+                <select id="chart-type">
+                    <option value="line">Линейный график</option>
+                    <option value="pie">Круговая диаграмма</option>
+                    <option value="heatmap">Сетчатая диаграмма (Heatmap)</option>
+                    <option value="treemap">Дерево (Treemap)</option>
+                    <option value="force-directed">Сетевой график (Force Directed)</option>
+                    <option value="radar">Радарная диаграмма (Radar Chart)</option>
+                    <option value="area">График с областями (Area Chart)</option>
+                    <option value="parallel-coordinates">Параллельные координаты (Parallel Coordinates)</option>
+                    <option value="streamgraph">Скользящий график (Streamgraph)</option>
+                    <option value="choropleth-map">Тепловая карта (Choropleth Map)</option>
+                    <option value="waterfall">Водопадный график (Waterfall Chart)</option>
+                    <option value="bubble">График с пузырьками (Bubble Chart)</option>
+                    <option value="cartogram">Картограмма</option>
+                </select>
+
+                <label for="title">Название:</label>
+                <input type="text" id="title" placeholder="Название графика" />
+
+                <label for="xlabel">Ось X:</label>
+                <input type="text" id="xlabel" placeholder="Метка оси X" />
+
+                <label for="ylabel">Ось Y:</label>
+                <input type="text" id="ylabel" placeholder="Метка оси Y" />
+            </div>
+        </section>
+        <section class="settings-section">
+            <div class="settings-title">
+                <h2>Оформление</h2>
+            </div>
+            <label for="font-size">Размер шрифта:</label>
+            <input type="range" min="10" max="30" step="1" id="font-size" onchange="updateFontSize(this.value)" />
+
+            <label for="line-thickness">Толщина линий:</label>
+            <input type="range" min="1" max="5" step="1" id="line-thickness"
+                onchange="updateLineThickness(this.value)" />
+
+            <label for="background-color">Цвет фона:</label>
+            <input type="color" id="background-color" onchange="updateBackgroundColor(this.value)" />
+
+            <label for="primary-color">Основной цвет графика:</label>
+            <input type="color" id="primary-color" onchange="updatePrimaryColor(this.value)" />
+            </div>
+        </section>
+        <section class="output-section">
+            <div class="output-title">
+                <h2>Результат визуализации</h2>
+            </div>
+            <div id="visualization-output"></div>
+            <div class="comments-block">
+                <ul id="comments-list"></ul>
+                <input type="text" id="comment-input" class="comment-input" placeholder="Ваш комментарий..." />
+                <button id="submit-comment">Отправить</button>
+            </div>
+        </section>
+
+        <section class="manual-diagramming">
+            <h2>Свободное создание диаграмм</h2>
+            <div id="diagram-container" style="width: 100%; height: 600px; border: 1px solid #ddd;"></div>
+            <div id="stencils-panel"></div>
+            <div id="diagram-container" style="width: 100%; height: 600px; border: 1px solid #ddd;"></div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>© 2025 Конструктор инфографики. Все права защищены.</p>
+    </footer>
+
+    <script>
+        // Хранилище комментариев по типам графиков
+        const commentsStorage = {};
+        ["line", "pie", "heatmap", "treemap"].forEach(type => {
+            commentsStorage[type] = [];
+        });
+
+        // Обработчики форм сохраняются такие же...
+
+        // ОБЪЯВЛЕНИЕ ФУНКЦИИ ДО ЕЁ ИСПОЛЬЗОВАНИЯ!
+        function addComment(commentText) {
+            // Получаем активный тип графика
+            const chartType = document.querySelector('#chart-type').value;
+
+            // Добавляем новый комментарий в хранилище
+            commentsStorage[chartType].push(commentText);
+
+            // Перерисовываем список комментариев
+            renderComments(chartType);
+        }
+
+        // Рендер текущих комментариев для выбранного графика
+        function renderComments(chartType) {
+            const commentsList = document.getElementById('comments-list');
+            commentsList.innerHTML = '';
+            commentsStorage[chartType].forEach(comment => {
+                const item = document.createElement('li');
+                item.textContent = comment;
+                commentsList.appendChild(item);
+            });
+        }
+
+        // Обработка отправки комментария
+        document.getElementById('submit-comment').addEventListener('click', function () {
+            const commentText = document.getElementById('comment-input').value.trim();
+            if (commentText !== '') {
+                addComment(commentText); // теперь функция уже объявлена и работает
+                document.getElementById('comment-input').value = '';
+            }
+        });
+        let currentData = [];
+        // Переменная для текущего активного типа графика
+        let activeChartType = "";
+        // Получаем выбранный тип графика
+        document.getElementById('chart-type').addEventListener('change', function (e) {
+            activeChartType = e.target.value;
+            renderComments(activeChartType);
+            updateVisualization(); // принудительно обновить визуализацию при смене типа графика
+        });
+        document.getElementById('generate-button').addEventListener('click', () => {
+            const textarea = document.querySelector('#data-textarea');
+            const csvData = textarea.value.trim();
+            processData(d3.csvParse(csvData)); // тут парсим данные из текстового поля и вызываем processData
+        });
+
+        document.getElementById('file-upload').addEventListener('change', handleFileUpload);
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.readAsText(file);
+
+            reader.onload = () => {
+                const uploadedData = d3.csvParse(reader.result);
+                processData(uploadedData); // парсим и обрабатываем данные
+            };
+        }
+
+        function displayResult(data) {
+            document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+        }
+        // Отправка комментария
+        document.getElementById('submit-comment').addEventListener('click', function () {
+            const commentText = document.getElementById('comment-input').value.trim();
+            if (commentText !== '' && activeChartType !== "") {
+                commentsStorage[activeChartType].push(commentText);
+                renderComments(activeChartType);
+                document.getElementById('comment-input').value = '';
+            }
+        });
+        // Обработчик отправки комментария
+        document.getElementById('submit-comment').addEventListener('click', function () {
+            const commentText = document.getElementById('comment-input').value.trim();
+            if (commentText !== '') {
+                addComment(commentText);
+                document.getElementById('comment-input').value = '';
+            }
+        });
+        document.getElementById('generate-button').addEventListener('click', () => {
+            const textarea = document.querySelector('#data-textarea');
+            const csvData = textarea.value.trim();
+            const parsedData = d3.csvParse(csvData);
+            processData(parsedData); // Передаем распаршенные данные дальше
+        });
+        // Удаление пропусков и некорректных значений
+        function cleanAndAggregateData(rawData) {
+            // Фильтруем записи, удаляя те, у которых нет обязательных полей или присутствуют некорректные значения
+            const filteredData = rawData.filter(d =>
+                d.year &&
+                d.gdp &&
+                d.population &&
+                !isNaN(Number(d.year)) &&
+                !isNaN(Number(d.gdp)) &&
+                !isNaN(Number(d.population))
+            ).map(d => ({
+                year: Number(d.year),
+                gdp: Number(d.gdp),
+                population: Number(d.population)
+            }));
+
+            // Агрегируем данные по каждому году
+            const aggregatedData = filteredData.reduce((acc, curr) => {
+                const existingYearEntry = acc.find(entry => entry.year === curr.year);
+                if (existingYearEntry) {
+                    existingYearEntry.gdp += curr.gdp;
+                    existingYearEntry.population += curr.population;
+                } else {
+                    acc.push({
+                        year: curr.year,
+                        gdp: curr.gdp,
+                        population: curr.population
+                    });
+                }
+                return acc;
+            }, []);
+
+            return aggregatedData.sort((a, b) => a.year - b.year);
+        }
+
+        // Функция для нормализации и очистки данных
+        function normalizeData(data) {
+            return data.map(row => {
+                // Проверяем, корректны ли данные в каждом столбце
+                row.year = Number(row.year) || undefined; // преобразуем в число
+                row.gdp = Number(row.gdp) || undefined; // преобразуем в число
+                row.population = Number(row.population) || undefined; // преобразуем в число
+
+                // Если какое-то поле стало undefined (из-за отсутствия данных или ошибок), возвращаем false
+                if ([row.year, row.gdp, row.population].some(val => val === undefined)) {
+                    return false;
+                }
+
+                return row;
+            }).filter(Boolean); // Оставляем только действительные строки
+        }
+        function processData(data) {
+            if (!Array.isArray(data)) {
+                console.error("Данные не являются массивом. Проверьте формат файла.");
+                return;
+            }
+
+            currentData = normalizeData(data);
+            currentData.forEach(d => {
+                d.year = parseInt(d.year);
+                d.gdp = parseFloat(d.gdp);
+                d.population = parseFloat(d.population);
+                d.gdpPerCapita = isNaN(parseFloat(d.population)) || parseFloat(d.population) === 0 ? null : d.gdp / d.population;
+            });
+            currentData = cleanAndAggregateData(data);
+            currentData = data.filter(d => d.year && d.gdp && d.population).map(d => ({
+                year: parseInt(d.year),
+                gdp: parseFloat(d.gdp),
+                population: parseFloat(d.population),
+                gdpPerCapita: isNaN(parseFloat(d.population)) || parseFloat(d.population) === 0 ? null : d.gdp / d.population
+            }));
+            const preparedData = data.map(d => ({
+                year: d.year,
+                population: parseFloat(d.population),
+                gdp: parseFloat(d.gdp)
+            }));
+            updateVisualization(); // вызвать обновление визуализации сразу после обработки данных
+        }
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.readAsText(file);
+
+            reader.onload = () => {
+                const uploadedData = d3.csvParse(reader.result);
+                console.log("Прочитанные данные:", uploadedData); // Показываем данные в консоле
+                processData(uploadedData); // передаем данные для дальнейшей обработки
+            };
+        }
+        function updateVisualization() {
+            const chartType = document.querySelector('#chart-type').value;
+            const title = document.querySelector('#title').value || 'Инфографика';
+            const xlabel = document.querySelector('#xlabel').value || 'Год';
+            const ylabel = document.querySelector('#ylabel').value || 'Значение';
+
+            const outputContainer = document.querySelector('#visualization-output');
+            outputContainer.innerHTML = ''; // очищаем контейнер перед перерисовкой
+
+            if (!currentData || !Array.isArray(currentData)) {
+                alert('Данные отсутствуют!');
+                return;
+            }
+            // Применяем пользовательские настройки
+            const fontSize = document.getElementById('font-size').value;
+            const lineThickness = document.getElementById('line-thickness').value;
+            const bgColor = document.getElementById('background-color').value;
+            const primaryColor = document.getElementById('primary-color').value;
+
+            // Устанавливаем глобально применяемые стили
+            d3.selectAll("text").style("font-size", fontSize + "px");
+            d3.selectAll(".line").style("stroke-width", lineThickness + "px");
+            d3.select("svg").style("background-color", bgColor);
+            d3.selectAll(".line").style("stroke", primaryColor);
+            d3.selectAll(".point").style("fill", primaryColor);
+
+            switch (chartType) {
+                case 'line':
+                    drawLineChart(outputContainer, title, xlabel, ylabel, currentData);
+                    break;
+                case 'pie':
+                    drawPieChart(outputContainer, title, currentData);
+                    break;
+                case 'heatmap':
+                    drawHeatmap(outputContainer, title, currentData);
+                    break;
+                case 'treemap':
+                    drawTreemap(outputContainer, title, currentData);
+                    break;
+                case 'force-directed':
+                    drawForceDirectedGraph(outputContainer, title, currentData);
+                    break;
+                case 'radar':
+                    drawRadarChart(outputContainer, title, currentData);
+                    break;
+                case 'area':
+                    drawAreaChart(outputContainer, title, xlabel, ylabel, currentData);
+                    break;
+                case 'parallel-coordinates':
+                    drawParallelCoordinates(outputContainer, title, currentData);
+                    break;
+                case 'streamgraph':
+                    drawStreamgraph(outputContainer, title, currentData);
+                    break;
+                case 'choropleth-map':
+                    drawChoroplethMap(outputContainer, title, currentData);
+                    break;
+                case 'waterfall':
+                    drawWaterfallChart(outputContainer, title, currentData);
+                    break;
+                case 'bubble':
+                    drawBubbleChart(outputContainer, title, currentData);
+                    break;
+                case 'cartogram':
+                    drawCartogram(outputContainer, title, currentData);
+                    break;
+                default:
+                    console.error("Unknown chart type:", chartType);
+            }
+        }
+
+        async function exportImage() {
+            const element = document.querySelector("#visualization-output");
+            if (!element) {
+                console.error("Элемент не найден!");
+                return;
+            }
+
+            try {
+                // Преобразовываем элемент в строку Base64
+                const base64String = await domtoimage.toPng(element, { quality: 0.95 });
+
+                // Преобразуем строку Base64 в Blob
+                const byteCharacters = atob(base64String.split(',')[1]); // Получаем только данные изображения
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'image/png' });
+
+                // Генерируем URL и начинаем скачивание
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = downloadUrl;
+                a.download = "график.png";
+                a.click();
+                URL.revokeObjectURL(downloadUrl);
+            } catch (err) {
+                console.error("Ошибка экспорта изображения:", err);
+            }
+        }
+
+
+        // Функция для экспорта данных в Excel
+        function exportExcel() {
+            const wb = XLSX.utils.book_new();
+            const ws_data = currentData.map(d => ({ Year: d.year, GDP: d.gdp }));
+            const ws = XLSX.utils.json_to_sheet(ws_data);
+            XLSX.utils.book_append_sheet(wb, ws, "Данные");
+
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+            const blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
+            const downloadUrl = URL.createObjectURL(blob);
+
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = "данные.xlsx";
+            a.click();
+            URL.revokeObjectURL(downloadUrl);
+        }
+
+        // Функция для преобразования строки в буфер массива
+        function s2ab(s) {
+            var buf = new ArrayBuffer(s.length);
+            var view = new Uint8Array(buf);
+            for (var i = 0; i != s.length; ++i) view[i] = s.charCodeAt(i) & 0xFF;
+            return buf;
+        }
+        // Установка размера шрифта
+        function updateFontSize(size) {
+            d3.selectAll("text").style("font-size", size + "px");
+        }
+
+        // Толщина линий
+        function updateLineThickness(thickness) {
+            d3.selectAll(".line").style("stroke-width", thickness + "px");
+        }
+
+        // Фон графика
+        function updateBackgroundColor(color) {
+            d3.select("svg").style("background-color", color);
+        }
+
+        // Основной цвет графика
+        function updatePrimaryColor(color) {
+            d3.selectAll(".line").style("stroke", color);
+            d3.selectAll(".point").style("fill", color);
+        }
+
+        function drawPieChart(outputContainer, title) {
+            const width = 400;
+            const height = 400;
+            const radius = Math.min(width, height) / 2;
+
+            const svg = d3.select(outputContainer)
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width / 2},${height / 2})`);
+
+            const pie = d3.pie().value(d => d.gdp);
+            const arcs = pie(currentData);
+
+            const arcPath = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+
+            svg.selectAll("path")
+                .data(arcs)
+                .enter()
+                .append("path")
+                .attr("d", arcPath)
+                .attr("fill", (d, i) => d3.schemeCategory10[i % 10])
+                .attr("stroke", "white")
+                .style("stroke-width", "2px");
+
+            svg.append("text")
+                .attr("x", 0)
+                .attr("y", -radius * 0.8)
+                .attr("text-anchor", "middle")
+                .text(title);
+        }
+
+        function drawHeatmap(outputContainer, title, data) {
+            const margin = { top: 20, right: 30, bottom: 80, left: 50 };
+            const width = 800 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = d3.select(outputContainer)
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            const xScale = d3.scaleBand()
+                .domain(currentData.map(d => d.year))
+                .range([0, width])
+                .padding(0.05); // Уменьшение интервала между столбцами
+
+            const yScale = d3.scaleBand()
+                .domain(["Население", "ВВП"])
+                .range([0, height])
+                .padding(0.1);
+
+            const populationColorScale = d3.scaleSequential(d3.interpolateBlues)
+                .domain([d3.min(currentData, d => d.population), d3.max(currentData, d => d.population)]);
+
+            const gdpColorScale = d3.scaleSequential(d3.interpolateYlOrRd)
+                .domain([d3.min(currentData, d => d.gdp), d3.max(currentData, d => d.gdp)]);
+
+            // Население
+            svg.selectAll(".population-cell")
+                .data(currentData)
+                .enter()
+                .append("rect")
+                .attr("class", "population-cell")
+                .attr("x", d => xScale(d.year))
+                .attr("y", () => yScale("Население"))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
+                .style("fill", d => d.population > 0 ? populationColorScale(d.population) : "#ccc")
+                .transition().duration(700).delay((d, i) => i * 50); // Анимация
+
+            // ВВП
+            svg.selectAll(".gdp-cell")
+                .data(currentData)
+                .enter()
+                .append("rect")
+                .attr("class", "gdp-cell")
+                .attr("x", d => xScale(d.year))
+                .attr("y", () => yScale("ВВП"))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
+                .style("fill", d => d.gdp > 0 ? gdpColorScale(d.gdp) : "#ccc")
+                .transition().duration(700).delay((d, i) => i * 50); // Анимация
+
+            // Оси
+            svg.append("g")
+                .attr("class", "axis-x")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(xScale));
+
+            svg.append("text")
+                .attr("class", "label")
+                .attr("x", width / 2)
+                .attr("y", height + margin.bottom * 0.7)
+                .attr("text-anchor", "middle")
+                .text("Год");
+
+            svg.append("g")
+                .attr("class", "axis-y")
+                .call(d3.axisLeft(yScale));
+
+            svg.append("text")
+                .attr("class", "label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -margin.left + 20)
+                .attr("x", -(height / 2))
+                .attr("dy", "-1em")
+                .attr("text-anchor", "middle")
+                .text("Показатель");
+
+            // Заголовок
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -10)
+                .attr("text-anchor", "middle")
+                .text(title);
+
+            // Легенда
+            const legendPop = svg.append('g')
+                .attr('transform', `translate(10, ${height + 20})`); // расположить внизу слева
+
+            legendPop.append('rect')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', 100)
+                .attr('height', 10)
+                .style('fill', populationColorScale(d3.extent(currentData, d => d.population)[1]));
+
+            legendPop.append('text')
+                .attr('x', 110)
+                .attr('y', 10)
+                .text('Максимальное население');
+
+            const legendGDP = svg.append('g')
+                .attr('transform', `translate(10, ${height + 40})`); // ниже первой легенды
+
+            legendGDP.append('rect')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('width', 100)
+                .attr('height', 10)
+                .style('fill', gdpColorScale(d3.extent(currentData, d => d.gdp)[1]));
+
+            legendGDP.append('text')
+                .attr('x', 110)
+                .attr('y', 10)
+                .text('Максимальный ВВП');
+
+            // Интерактивные подсказки (тултипы)
+            svg.selectAll('.population-cell, .gdp-cell')
+                .on('mouseover', function (event, d) {
+                    tooltip.transition()
+                        .style('opacity', 0.9);
+
+                    let textContent = '';
+                    if (this.classList.contains('population-cell')) {
+                        textContent += `<strong>Годы:</strong> ${d.year}<br><strong>Население:</strong> ${formatNumber(d.population)}`;
+                    } else {
+                        textContent += `<strong>Годы:</strong> ${d.year}<br><strong>ВВП:</strong> ${formatNumber(d.gdp)}`;
+                    }
+
+                    tooltip.html(textContent)
+                        .style('left', `${event.pageX + 10}px`)
+                        .style('top', `${event.pageY - 28}px`);
+                })
+                .on('mouseout', function () {
+                    tooltip.transition()
+                        .style('opacity', 0);
+                });
+
+            // HTML-элемент для всплывающей подсказки
+            let tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('position', 'absolute')
+                .style('z-index', '10')
+                .style('visibility', 'hidden')
+                .style('background-color', '#fff')
+                .style('border-radius', '5px')
+                .style('box-shadow', '1px 1px 3px #aaa')
+                .style('padding', '5px');
+
+            // Функция форматирования чисел
+            const formatNumber = num => new Intl.NumberFormat().format(num);
+        }
+
+        // ЛИНЕЙНЫЙ ГРАФИК
+        function drawLineChart(outputContainer, title, xlabel, ylabel, data) {
+            const margin = { top: 20, right: 30, bottom: 40, left: 50 };
+            const width = 800 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            const svg = d3.select(outputContainer)
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Масштаб по оси X
+            const xScale = d3.scaleBand()
+                .domain(currentData.map(d => d.year))
+                .range([0, width])
+                .padding(0.1);
+
+            // Масштаб по оси Y
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(currentData, d => d.gdp)])
+                .range([height, 0]);
+
+            // Генерация линии
+            const line = d3.line()
+                .x(d => xScale(d.year))
+                .y(d => yScale(d.gdp));
+
+            // Основной путь графика
+            svg.append("path")
+                .datum(currentData)
+                .attr("class", "line")
+                .attr("fill", "none")
+                .attr("stroke", "steelblue")
+                .attr("stroke-width", 1.5)
+                .attr("d", line);
+
+            // Ось X
+            svg.append("g")
+                .attr("class", "axis axis-x")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale));
+
+            // Ось Y
+            svg.append("g")
+                .attr("class", "axis axis-y")
+                .call(d3.axisLeft(yScale));
+
+            // Добавляем круги для точек данных
+            const points = svg.selectAll(".point")
+                .data(currentData)
+                .enter()
+                .append("circle")
+                .attr("class", "point")
+                .attr("cx", d => xScale(d.year))
+                .attr("cy", d => yScale(d.gdp))
+                .attr("r", 5)
+                .attr("fill", "red");
+
+            function createUpdatedCsvData(data) {
+                const headers = ["year", "population", "gdp"];
+                const rows = data.map(d => [
+                    d.year,
+                    d.population,
+                    d.gdp
+                ]);
+
+                return [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+            }
+            // Функция для фиксации точки на положении курсора
+            function fixPointToCursor(event, d) {
+                // Сохраняем текущую позицию курсора и положение точки
+                const cursorInitialPos = { x: event.clientX, y: event.clientY };
+                const pointOriginalPos = { cx: xScale(d.year), cy: yScale(d.gdp) };
+                const updatedCsvData = createUpdatedCsvData(currentData);
+                document.getElementById('data-textarea').value = updatedCsvData;
+                // Обрабатываем дальнейшее движение мыши
+                const moveHandler = (ev) => {
+                    // Новая позиция точки зависит от расстояния, пройденного курсором
+                    const newCX = pointOriginalPos.cx;
+                    const newCY = pointOriginalPos.cy - (cursorInitialPos.y - ev.clientY); // Инвертируем направление
+
+                    // Обновляем точку и линию
+                    d.gdp = yScale.invert(newCY); // Обновляем данные на основе новой позиции
+                    svg.select(".line").attr("d", line); // Обновляем линию графика
+
+                    // Обновляем все точки сразу
+                    points.attr("cy", p => yScale(p.gdp));
+                };
+
+                // Регистрируем обработчик движения мыши
+                window.addEventListener("mousemove", moveHandler);
+
+                // Завершаем процесс перетаскивания при отпускании мыши
+                const stopHandler = () => {
+                    window.removeEventListener("mousemove", moveHandler);
+                    window.removeEventListener("mouseup", stopHandler);
+                };
+
+                window.addEventListener("mouseup", stopHandler);
+            }
+
+            // Назначаем обработчик перетаскивания на точки
+            points.each(function (d) {
+                this.addEventListener("mousedown", (event) => fixPointToCursor(event, d));
+            });
+
+            // Надписи осей и заголовок
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -10)
+                .attr("text-anchor", "middle")
+                .text(title);
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height + 40)
+                .attr("text-anchor", "middle")
+                .text(xlabel);
+
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("x", -(height / 2))
+                .attr("y", -40)
+                .attr("text-anchor", "middle")
+                .text(ylabel);
+        }
+        // ТЕПЛОВАЯ КАРТА (HEATMAP)
+        function drawHeatmap(outputContainer, title, data) {
+            const margin = { top: 20, right: 30, bottom: 40, left: 50 };
+            const width = 800 - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+
+            // SVG-контейнер
+            const svg = d3.select(outputContainer)
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            // Масштабы для оси X (годы)
+            const xScale = d3.scaleBand()
+                .domain(currentData.map(d => d.year))
+                .range([0, width])
+                .padding(0.1);
+
+            // Масштаб для оси Y (население/GDP)
+            const yScale = d3.scaleBand()
+                .domain(["Население", "ВВП"])
+                .range([0, height])
+                .padding(0.1);
+
+            // Раздельные шкалы цветов для населения и ВВП
+            const populationColorScale = d3.scaleSequential(d3.interpolateBlues)
+                .domain([d3.min(currentData, d => d.population), d3.max(currentData, d => d.population)]);
+
+            const gdpColorScale = d3.scaleSequential(d3.interpolateYlOrRd)
+                .domain([d3.min(currentData, d => d.gdp), d3.max(currentData, d => d.gdp)]);
+
+            // Отрисовка прямоугольников для населения
+            svg.selectAll(".population-cell")
+                .data(currentData)
+                .enter()
+                .append("rect")
+                .attr("class", "population-cell")
+                .attr("x", d => xScale(d.year))
+                .attr("y", () => yScale("Население"))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
+                .style("fill", d => d.population > 0 ? populationColorScale(d.population) : "#ccc") // Серый для отсутствующих данных
+                .transition().duration(700).delay((d, i) => i * 50); // Анимация
+
+            // Отрисовка прямоугольников для GDP
+            svg.selectAll(".gdp-cell")
+                .data(currentData)
+                .enter()
+                .append("rect")
+                .attr("class", "gdp-cell")
+                .attr("x", d => xScale(d.year))
+                .attr("y", () => yScale("ВВП"))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
+                .style("fill", d => d.gdp > 0 ? gdpColorScale(d.gdp) : "#ccc") // Серый для отсутствующих данных
+                .transition().duration(700).delay((d, i) => i * 50); // Анимация
+
+            // Ось X (нижняя ось)
+            svg.append("g")
+                .attr("class", "axis-x")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(xScale));
+
+            // Подпись оси X
+            svg.append("text")
+                .attr("class", "label")
+                .attr("x", width / 2)
+                .attr("y", height + margin.bottom * 0.7)
+                .attr("text-anchor", "middle")
+                .text("Год");
+
+            // Ось Y (левая сторона)
+            svg.append("g")
+                .attr("class", "axis-y")
+                .call(d3.axisLeft(yScale));
+
+            // Подпись оси Y
+            svg.append("text")
+                .attr("class", "label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -margin.left + 20)
+                .attr("x", -(height / 2))
+                .attr("dy", "-1em")
+                .attr("text-anchor", "middle")
+                .text("Показатель");
+
+            // Заголовок графика
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -10)
+                .attr("text-anchor", "middle")
+                .text(title);
+        }
+
+        // TREEMAP
+        function drawTreemap(outputContainer, title, data) {
+            const width = 800;
+            const height = 400;
+
+            const root = d3.hierarchy({
+                children: currentData.map(d => ({
+                    name: `${d.year}`,
+                    value: d.gdp
+                }))
+            }).sum(d => d.value);
+
+            const treemap = d3.treemap()
+                .size([width, height])
+                .paddingOuter(10)
+                .paddingTop(20)
+                .paddingInner(1);
+
+            treemap(root);
+
+            const cells = root.leaves();
+
+            const svg = d3.select(outputContainer)
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const group = svg.selectAll("g")
+                .data(cells)
+                .enter()
+                .append("g")
+                .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+            group.append("rect")
+                .attr("width", d => d.x1 - d.x0)
+                .attr("height", d => d.y1 - d.y0)
+                .attr("fill", (d, i) => d3.schemeCategory10[i % 10]);
+
+            group.append("text")
+                .attr("x", 4)
+                .attr("y", 14)
+                .text(d => d.data.name);
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -10)
+                .attr("text-anchor", "middle")
+                .text(title);
+        }
+
+        // ФОРСИРОВАННАЯ СЕТЬ (FORCE DIRECTED GRAPH)
+        function drawForceDirectedGraph(outputContainer, title, data) {
+            const width = 800;
+            const height = 400;
+
+            const simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id))
+                .force("charge", d3.forceManyBody())
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            const nodes = currentData.map((d, index) => ({
+                id: `node-${index}`,
+                label: d.year.toString(),
+                size: d.gdp
+            }));
+
+            const links = nodes.map((n, idx) => ({
+                source: n.id,
+                target: nodes[(idx + 1) % nodes.length].id
+            }));
+
+            const svg = d3.select(outputContainer)
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const link = svg.append("g")
+                .selectAll("line")
+                .data(links)
+                .enter()
+                .append("line")
+                .attr("stroke", "#aaa");
+
+            const node = svg.append("g")
+                .selectAll("circle")
+                .data(nodes)
+                .enter()
+                .append("circle")
+                .attr("r", d => Math.sqrt(d.size) / 10)
+                .attr("fill", "steelblue");
+
+            simulation.nodes(nodes).on("tick", ticked);
+            simulation.force("link").links(links);
+
+            function ticked() {
+                link.attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node.attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+            }
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -10)
+                .attr("text-anchor", "middle")
+                .text(title);
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            const editorOptions = {
+                container: document.getElementById('diagram-container'),
+                editMode: true,                   // Активирует режим редактирования
+                theme: 'light',                   // Light или Dark темы
+                ui: 'sketch',                     // Интерфейс Sketch
+                format: 'png',                    // Формат экспорта
+                autosave: true,                   // Включает автосохранение
+                toolbarsVisible: true,            // Отображает панели инструментов
+                menuBarVisible: true,             // Верхняя панель меню
+                libraries: ['flowchart'],         // Наборы доступных библиотек
+                shapes: ['basic', 'flowchart'],   // Доступные группы фигур
+                stencilConfig: {                  // Конфигурация стикеров (библиотеки фигур)
+                    showStencilSearch: true,      // Видимость поиска
+                    categories: ['all']           // Категория стикеров
+                }
+            };
+
+            // Запускаем редактор
+            mxEditor.init(editorOptions);
+        });
+        document.getElementById('automatic-mode-btn').addEventListener('click', function () {
+            document.querySelector('.output-section').style.display = 'block'; // показать секцию с автоматическими диаграммами
+            document.querySelector('.manual-diagramming').style.display = 'none'; // скрыть секцию с free design
+        });
+
+        document.getElementById('free-design-btn').addEventListener('click', function () {
+            document.querySelector('.output-section').style.display = 'none'; // спрятать секцию с автоматическими диаграммами
+            document.querySelector('.manual-diagramming').style.display = 'block'; // показать секцию с free design
+        });
+        function exportDiagram() {
+            const diagramContainer = document.getElementById('diagram-container');
+            const xmlData = mxUtils.getGraph(diagramContainer).model.toXml();
+
+            // Получаем картинку
+            const imgData = mxUtils.getExportImage(xmlData, 'png');
+
+            // Начинаем скачивание
+            const a = document.createElement('a');
+            a.href = imgData;
+            a.download = 'diagram.png';
+            a.click();
+        }
+        
+        // Инициализируем стикеры
+        const stencilPanel = document.getElementById('stencils-panel');
+        stencilPanel.style.float = 'left';
+        stencilPanel.style.width = '20%';
+        stencilPanel.style.height = '100%';
+
+        // Элементы панели инструментов
+        const toolbarPanel = document.createElement('div');
+        toolbarPanel.id = 'toolbar';
+        toolbarPanel.style.float = 'right';
+        toolbarPanel.style.width = '10%';
+        toolbarPanel.style.height = '100%';
+
+        // Добавляем панели инструментов и стикеров
+        document.body.insertBefore(stencilPanel, document.getElementById('diagram-container'));
+        document.body.insertBefore(toolbarPanel, document.getElementById('diagram-container'));
+
+
+    </script>
+</body>
+
+</html>
